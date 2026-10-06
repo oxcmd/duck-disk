@@ -113,3 +113,7 @@ swift build --product DuckDisk && ./.build/debug/DuckDisk -scanPath <folder> -ho
 - `-scanPath` scans a folder on launch.
 - `-homeOverride` treats that folder as the home folder when classifying, for example a fixture written by `--fixture-only`.
 - `-snapshotDir` renders each room to PNG and then quits. `<room>.png` is the window; `<room>-render.png` is the room drawn by SwiftUI alone, which also shows scrolled content.
+
+## License
+
+Duck Disk is released under the [MIT License](../LICENSE).
