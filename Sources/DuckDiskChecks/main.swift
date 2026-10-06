@@ -156,6 +156,8 @@ section("Classifier") {
     check(!names(.downloads).contains("new-notes.txt"), "recent download kept")
     check(names(.aiModels).isSuperset(of: ["Ollama models", "Qwen-7B-GGUF", "openai/whisper-small", "llama-7b.Q4.gguf"]),
           "AI models found: \(names(.aiModels))")
+    check(!names(.aiModels).contains("style.safetensors"), "model files inside app bundles are left alone")
+    check(!names(.aiModels).contains("old-model.gguf"), "files already in the Trash are not listed")
     check(c.items[.aiModels]?.first { $0.name == "Ollama models" }?.detail.contains("llama3:latest") == true,
           "Ollama model names read from manifests")
     check(names(.developer).contains("pip") && !names(.developer).contains("huggingface"),

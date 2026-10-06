@@ -16,7 +16,7 @@ enum Fixture {
             try fm.createDirectory(atPath: PathFormat_parent(path), withIntermediateDirectories: true)
             var data = Data(count: bytes)
             if let fill {
-                data.withUnsafeMutableBytes { $0.initializeMemory(as: UInt8.self, repeating: fill) }
+                data = Data(repeating: fill, count: bytes)
             } else {
                 data.withUnsafeMutableBytes { buf in
                     for i in 0..<buf.count { buf[i] = UInt8.random(in: 0...255) }
@@ -52,6 +52,8 @@ enum Fixture {
         try file(".cache/huggingface/hub/models--openai--whisper-small/blobs/9a1c", bytes: 1_500_000)
         try file(".cache/pip/http/wheel", bytes: 1_000_000)
         try file("Documents/llama-7b.Q4.gguf", bytes: 2_000_000)
+        try file("Applications/Painter.app/Contents/Resources/style.safetensors", bytes: 2_000_000)
+        try file(".Trash/old-model.gguf", bytes: 2_000_000)
         try file("Documents/Quarterly REPORT.pdf", bytes: 900_000)
         try file("Documents/.hidden-config", bytes: 1_000)
         try file("Pictures/beach.jpg", bytes: 3_000_000, fill: 7)

@@ -133,6 +133,8 @@ final class AppModel {
     @ObservationIgnored private(set) var categoryByPath: [String: CleanupCategory] = [:]
     /// For every folder that contains cleanup items: clearable bytes inside it per category.
     @ObservationIgnored private var clearableInside: [String: [CleanupCategory: Int64]] = [:]
+    /// Bumped whenever the category index changes, so views that colour by category redraw.
+    private(set) var classificationVersion = 0
 
     init() {
         Prefs.register()
@@ -381,6 +383,7 @@ final class AppModel {
         }
         categoryByPath = map
         clearableInside = inside
+        classificationVersion += 1
     }
 
     /// The cleanup category that makes up at least half of a folder's bytes, if any.

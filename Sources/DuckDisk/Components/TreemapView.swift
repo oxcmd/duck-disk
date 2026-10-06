@@ -83,7 +83,8 @@ struct TreemapView: View {
     }
 
     private func layoutKey(_ size: CGSize) -> String {
-        "\(ObjectIdentifier(folder).hashValue)|\(Int(size.width))x\(Int(size.height))|\(metric)|\(depth)|\(model.revision)"
+        // Colours come from the classification, which changes again when the duplicate search finishes.
+        "\(ObjectIdentifier(folder).hashValue)|\(Int(size.width))x\(Int(size.height))|\(metric)|\(depth)|\(model.revision)|\(model.classificationVersion)"
     }
 
     private func cellIndex(at point: CGPoint) -> Int? {

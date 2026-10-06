@@ -247,7 +247,11 @@ public enum Classifier {
                     let ref = ItemRef(dir: dir, fileName: f.name)
                     out.append(item(ref, .aiModels, detail: "Model file"))
                 }
-                stack.append(contentsOf: dir.subdirs.filter { !$0.isRemoved })
+                // Never inside app bundles or other packages (removing a file there breaks the app),
+                // nor in the Trash.
+                stack.append(contentsOf: dir.subdirs.filter {
+                    !$0.isRemoved && !$0.isPackage && !(dir === home && $0.name == ".Trash")
+                })
             }
         }
         return out
