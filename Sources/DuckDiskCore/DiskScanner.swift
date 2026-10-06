@@ -104,7 +104,7 @@ public final class DiskScanner: @unchecked Sendable {
         group.wait()
         if isCancelled { return nil }
 
-        aggregate(root)
+        ScanTree.rollUp(root)
         var stats = ScanStats()
         statsLock.lock()
         stats.files = live.files
@@ -269,21 +269,6 @@ public final class DiskScanner: @unchecked Sendable {
         return work
     }
 
-    /// Rolls direct totals up into every ancestor (children before parents).
-    private func aggregate(_ root: DirNode) {
-        var order: [DirNode] = []
-        var stack = [root]
-        while let d = stack.popLast() {
-            order.append(d)
-            stack.append(contentsOf: d.subdirs)
-        }
-        for node in order.reversed() {
-            guard let parent = node.parent else { continue }
-            parent.size += node.size
-            parent.fileCount += node.fileCount
-            parent.mediaSize += node.mediaSize
-        }
-    }
 }
 
 /// File-type lookups keyed by lowercase extension, packed into an integer to avoid string allocation.

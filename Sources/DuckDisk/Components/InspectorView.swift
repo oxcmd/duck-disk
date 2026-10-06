@@ -67,6 +67,10 @@ struct InspectorView: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 row("Where", PathFormat.abbreviated(PathFormat.parent(of: item.path)))
+                if let ref = item.ref, let parent = ref.isDirectory ? ref.dir.parent : ref.dir, parent.size > 0 {
+                    row("Of parent", String(format: "%.1f%% of %@", Double(size) / Double(parent.size) * 100,
+                                            parent.isRoot ? model.target.name : parent.name))
+                }
                 if let d = details {
                     row("Kind", d.kind)
                     if d.isDirectory { row("Contains", "\(d.itemCount.formatted()) files") }
@@ -75,6 +79,31 @@ struct InspectorView: View {
                     if let c = d.created { row("Created", DateFormat.shortString(c)) }
                 }
                 row("Safety", verdict.reason ?? "Can go to the Trash")
+            }
+
+            if let ref = item.ref, ref.isDirectory {
+                let inside = Array(ref.dir.sortedChildren.prefix(3))
+                if !inside.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Largest inside").font(.system(size: 11)).foregroundStyle(Theme.textTertiary)
+                        ForEach(inside, id: \.self) { child in
+                            Button {
+                                model.inspected = InspectedItem(path: child.path, ref: child)
+                            } label: {
+                                HStack(spacing: 6) {
+                                    FileIcon(path: child.path, size: 14)
+                                    Text(child.name).lineLimit(1).truncationMode(.middle)
+                                    Spacer()
+                                    Text(ByteFormat.string(child.size)).monospacedDigit()
+                                        .foregroundStyle(Theme.textSecondary)
+                                }
+                                .font(.system(size: 12))
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
             }
 
             VStack(spacing: 8) {

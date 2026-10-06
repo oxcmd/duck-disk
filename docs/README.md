@@ -9,11 +9,11 @@ Requires macOS 14 or later. Builds with the Swift 6 Command Line Tools; Xcode is
 | Room | What it does |
 |------|--------------|
 | Overview | A donut chart of the whole drive, a "ready to clear" total and one button to move the selection to the Trash. |
-| Find | Searches every file name from the scan as you type, hidden folders included, sorted by size. |
-| Space | Drills into folders largest-first, or lists the largest files on the drive. |
-| Cleanup | Caches, logs, app leftovers, developer files and old downloads, grouped, totalled and selectable item by item. |
+| Find | Searches every file name from the scan as you type, hidden folders included, sorted by size. The last scan's index is saved, so Find works right after launch. |
+| Space | Drills into folders largest-first, shows the drive as a treemap (by size, file count or age, with adjustable depth), or lists the largest files. |
+| Cleanup | Caches, logs, app leftovers, developer files, local AI models (Ollama, LM Studio, Hugging Face and others) and old downloads, grouped, totalled and selectable item by item. |
 | Duplicates | Files with identical contents (size → partial hash → full SHA-256). Hard links and APFS clones are not counted as waste. One copy per set is always kept. |
-| Applications | Every app with its data across `~/Library`, launch agents and running processes. Uninstall moves the app and its data to the Trash. |
+| Applications | Every app with its data across `~/Library`, launch agents and running processes. Clear Cache removes only caches and web data; Uninstall moves the app and its data to the Trash. |
 | Monitor | Live CPU, memory, top processes, listening ports and battery health. |
 | Compress | Re-encodes videos (HEVC/H.264) and photos (HEIC). A result is kept only when it is smaller; originals go to the Trash. |
 | Activity | Space recovered per week, a log of cleanups, and snapshot comparisons that show which folders grew or shrank. |
@@ -76,8 +76,9 @@ The app is ad-hoc signed, so each rebuild has a new signature. After a rebuild, 
 - When downloads count as old (default 90 days) and when build folders count as stale (default 30 days).
 - Minimum file size for the duplicate search (default 1 MB).
 - Whether a snapshot is saved after every scan.
+- Whether Find remembers file names between launches (turning it off deletes the saved indexes).
 
-App data (cleanup history and snapshots) is stored in `~/Library/Application Support/Duck Disk`.
+App data (cleanup history, snapshots and the Find index) is stored in `~/Library/Application Support/Duck Disk`. The index of a full scan of about 2.5 million files takes around 50 MB.
 
 ## Project layout
 

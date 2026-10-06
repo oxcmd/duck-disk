@@ -111,7 +111,13 @@ private struct AppDetail: View {
     @Environment(AppModel.self) private var model
     let app: AppInfo
     @State private var chosenLeftovers = Set<String>()
-    @State private var confirmQuit = false
+    /// The action waiting for the running app to quit.
+    @State private var pendingAfterQuit: AfterQuit?
+
+    enum AfterQuit: Identifiable {
+        case uninstall, clearCache
+        var id: Self { self }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -219,6 +225,12 @@ private struct AppDetail: View {
                     }
                     .buttonStyle(QuietButtonStyle())
                 }
+                Button("Clear Cache (\(ByteFormat.string(app.cacheSize)))") {
+                    if app.isRunning { pendingAfterQuit = .clearCache } else { askClearCache() }
+                }
+                .buttonStyle(QuietButtonStyle())
+                .disabled(app.cacheSize == 0)
+                .help("Moves the app's caches and web data to the Trash. Settings and documents stay.")
                 Button("Uninstall…") { uninstall() }
                     .buttonStyle(PrimaryButtonStyle())
                     .disabled(app.isApple || !SafetyGuard.check(app.path).isAllowed)
@@ -227,17 +239,21 @@ private struct AppDetail: View {
         }
         .onAppear { chosenLeftovers = [] }
         .onChange(of: app.id) { _, _ in chosenLeftovers = [] }
-        .alert("Quit \(app.name) first?", isPresented: $confirmQuit) {
-            Button("Quit and Uninstall") {
+        .alert("Quit \(app.name) first?", isPresented: Binding(get: { pendingAfterQuit != nil },
+                                                               set: { if !$0 { pendingAfterQuit = nil } }),
+               presenting: pendingAfterQuit) { action in
+            Button(action == .uninstall ? "Quit and Uninstall" : "Quit and Clear Cache") {
                 quit()
                 Task {
                     try? await Task.sleep(nanoseconds: 1_500_000_000)
-                    askUninstall()
+                    if action == .uninstall { askUninstall() } else { askClearCache() }
                 }
             }
             Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("\(app.name) is running. It needs to quit before it can go to the Trash.")
+        } message: { action in
+            Text(action == .uninstall
+                 ? "\(app.name) is running. It needs to quit before it can go to the Trash."
+                 : "\(app.name) is running. Quit it first so it does not write to its cache while it is cleared.")
         }
     }
 
@@ -262,7 +278,13 @@ private struct AppDetail: View {
     }
 
     private func uninstall() {
-        if app.isRunning { confirmQuit = true } else { askUninstall() }
+        if app.isRunning { pendingAfterQuit = .uninstall } else { askUninstall() }
+    }
+
+    private func askClearCache() {
+        model.askTrash(paths: app.caches.map { ($0.path, $0.size) }, source: "Applications") { _ in
+            model.loadApps(force: true)
+        }
     }
 
     private func askUninstall() {

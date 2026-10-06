@@ -31,6 +31,7 @@ enum Theme {
         case .logs: return Color(nsColor: NSColor(hex: 0xE5584F))
         case .leftovers: return Color(nsColor: NSColor(hex: 0xD65A9C))
         case .developer: return Color(nsColor: NSColor(hex: 0x7C5CFF))
+        case .aiModels: return Color(nsColor: NSColor(hex: 0x4FB477))
         case .downloads: return Color(nsColor: NSColor(hex: 0x4C7DFF))
         case .duplicates: return Color(nsColor: NSColor(hex: 0x36B3C4))
         }

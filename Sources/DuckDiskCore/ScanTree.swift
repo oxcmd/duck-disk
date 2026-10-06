@@ -186,6 +186,22 @@ public final class ScanTree: @unchecked Sendable {
         return max(0, v.used - root.size)
     }
 
+    /// Adds each directory's totals (initially its direct files only) into every ancestor, children first.
+    static func rollUp(_ root: DirNode) {
+        var order: [DirNode] = []
+        var stack = [root]
+        while let d = stack.popLast() {
+            order.append(d)
+            stack.append(contentsOf: d.subdirs)
+        }
+        for node in order.reversed() {
+            guard let parent = node.parent else { continue }
+            parent.size += node.size
+            parent.fileCount += node.fileCount
+            parent.mediaSize += node.mediaSize
+        }
+    }
+
     /// Every directory that has not been removed, skipping removed subtrees.
     public func liveDirs() -> [DirNode] {
         var out: [DirNode] = []

@@ -1,17 +1,20 @@
 import DuckDiskCore
 import SwiftUI
 
-/// The heavy things come to the top: drill down folder by folder, or list the largest files.
+/// The heavy things come to the top: drill down folder by folder, see the drive as a treemap,
+/// or list the largest files.
 struct SpaceRoom: View {
     @Environment(AppModel.self) private var model
     @State private var current: DirNode?
-    @State private var mode = Mode.folders
+    @AppStorage("spaceMode") private var mode = Mode.folders
     @State private var rows: [ItemRef] = []
     @State private var largest: [SearchHit] = []
     @State private var selected: ItemRef?
+    @State private var metric = TreemapMetric.size
+    @State private var depth = 4
 
     enum Mode: String, CaseIterable, Identifiable {
-        case folders = "Folders", largest = "Largest files"
+        case folders = "Folders", treemap = "Treemap", largest = "Largest files"
         var id: String { rawValue }
     }
 
@@ -34,9 +37,15 @@ struct SpaceRoom: View {
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
-                    .frame(width: 220)
+                    .frame(width: 320)
                 }
-                if mode == .folders { breadcrumb(dir, tree: tree) }
+                if mode != .largest { breadcrumb(dir, tree: tree) }
+                if mode == .treemap {
+                    treemapControls
+                    ScrollView(.horizontal, showsIndicators: false) { legend }
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.textSecondary)
+                }
             }
             .padding(.horizontal, 24)
             .padding(.top, 20)
@@ -44,6 +53,14 @@ struct SpaceRoom: View {
 
             Divider().overlay(Theme.hairline)
 
+            if mode == .treemap {
+                TreemapView(folder: dir, metric: metric, depth: depth, selected: $selected) { folder in
+                    current = folder
+                    selected = nil
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+            } else {
             Group {
                 if mode == .folders {
                     List(rows, id: \.self, selection: $selected) { ref in
@@ -65,6 +82,7 @@ struct SpaceRoom: View {
             } primaryAction: { refs in
                 if let ref = refs.first { open(ref) }
             }
+            }
         }
         .onChange(of: selected) { _, ref in
             if let ref { model.inspected = InspectedItem(path: ref.path, ref: ref) }
@@ -85,6 +103,52 @@ struct SpaceRoom: View {
             guard let parent = dir.parent, current != nil else { return .ignored }
             current = parent
             return .handled
+        }
+    }
+
+    /// Size / Files / Age, depth and a colour legend, like a map key.
+    private var treemapControls: some View {
+        HStack(spacing: 14) {
+            Picker("", selection: $metric) {
+                ForEach(TreemapMetric.allCases) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(width: 190)
+            HStack(spacing: 6) {
+                Text("Depth \(depth)").font(.system(size: 12).monospacedDigit())
+                Button { depth = max(1, depth - 1) } label: { Image(systemName: "minus") }
+                    .disabled(depth <= 1)
+                Button { depth = min(8, depth + 1) } label: { Image(systemName: "plus") }
+                    .disabled(depth >= 8)
+            }
+            .buttonStyle(.borderless)
+            Spacer()
+        }
+        .font(.system(size: 11))
+        .foregroundStyle(Theme.textSecondary)
+    }
+
+    @ViewBuilder
+    private var legend: some View {
+        HStack(spacing: 10) {
+            if metric == .age {
+                ForEach(TreemapPalette.ages, id: \.label) { swatch($0.label, $0.color) }
+            } else {
+                ForEach(CleanupCategory.allCases.filter { !model.items($0).isEmpty }) { swatch($0.title, Theme.color($0)) }
+                swatch("Media", TreemapPalette.media)
+                swatch("Apps", TreemapPalette.apps)
+                swatch("System", TreemapPalette.system)
+                swatch("Other", TreemapPalette.other)
+            }
+        }
+        .lineLimit(1)
+    }
+
+    private func swatch(_ label: String, _ color: Color) -> some View {
+        HStack(spacing: 4) {
+            RoundedRectangle(cornerRadius: 2).fill(color.opacity(0.75)).frame(width: 9, height: 9)
+            Text(label)
         }
     }
 

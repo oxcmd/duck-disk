@@ -13,13 +13,17 @@ enum DevSnapshots {
             while model.phase != .ready || model.duplicatePhase == .running {
                 try? await Task.sleep(nanoseconds: 300_000_000)
             }
+            UserDefaults.standard.set("Folders", forKey: "spaceMode")
             for room in Room.allCases where room != .applications {
-
                 model.room = room
                 try? await Task.sleep(nanoseconds: 1_800_000_000)
                 capture(to: "\(dir)/\(room.rawValue).png")
                 render(room, model: model, to: "\(dir)/\(room.rawValue)-render.png")
             }
+            UserDefaults.standard.set("Treemap", forKey: "spaceMode")
+            model.room = .space
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            capture(to: "\(dir)/space-treemap.png")
             NSApp.terminate(nil)
         }
     }

@@ -24,6 +24,10 @@ Run through this list before publishing a build. Duck Disk moves people's files,
 - [ ] Choosing another drive or folder while a scan is running, or while it says "Working out what can go", shows only the new target's results.
 - [ ] A folder added under Settings → "Never scan these folders" is missing from Space after a rescan.
 
+- [ ] Quit and reopen the app: Find searches the saved index before any scan and says when it was made.
+- [ ] Space → Treemap: rectangles match the folder sizes, Size/Files/Age and Depth −/+ change the picture, double-click opens a folder, the breadcrumb goes back.
+- [ ] Cleanup lists local AI models (if any) under "AI models", unselected.
+
 ## 4. Clearing to the Trash
 
 - [ ] Overview: the centre total changes as categories are ticked and unticked.
@@ -48,6 +52,7 @@ Run through this list before publishing a build. Duck Disk moves people's files,
 - [ ] A helper app whose bundle name repeats another app's name (for example Claude Code URL Handler next to Claude) does not list that app's data folders.
 - [ ] Uninstall a small test app that is running: the app asks to quit it first, then the app and its data are in the Trash.
 - [ ] Apple apps cannot be uninstalled.
+- [ ] Clear Cache on a running app asks to quit it first, then moves only caches and web data to the Trash; the app keeps its settings.
 
 ## 7. Monitor
 

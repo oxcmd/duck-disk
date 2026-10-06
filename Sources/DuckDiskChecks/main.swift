@@ -70,6 +70,24 @@ if let i = args.firstIndex(of: "--trash-test"), i + 1 < args.count {
     exit(0)
 }
 
+// Times saving and loading the search index for a real folder.
+if let i = args.firstIndex(of: "--index-bench"), i + 1 < args.count {
+    let t = DiskScanner(rootPath: args[i + 1]).scanSync()!
+    let dir = URL(fileURLWithPath: base + "/index")
+    var start = Date()
+    try ScanIndex.save(t, in: dir)
+    let saveTime = Date().timeIntervalSince(start)
+    let bytes = (try? FileManager.default.attributesOfItem(atPath: ScanIndex.url(forRoot: t.rootPath, in: dir).path)[.size]
+        as? Int) ?? 0
+    start = Date()
+    let loaded = ScanIndex.load(root: t.rootPath, in: dir)
+    print(String(format: "files=%d save=%.2fs load=%.2fs file=%@ match=%@", t.stats.files, saveTime,
+                 Date().timeIntervalSince(start), ByteFormat.string(Int64(bytes)),
+                 loaded?.root.size == t.root.size ? "yes" : "no"))
+    try? FileManager.default.removeItem(atPath: base)
+    exit(0)
+}
+
 let home = try Fixture.make(at: base + "/duckdisk-fixture")
 
 section("Formatting") {
@@ -124,6 +142,7 @@ section("Classifier") {
     let registry = InstalledAppRegistry(entries: [], extraIDs: ["com.example.browser"], useLaunchServices: false)
     var ctx = ClassifierContext(home: home, tempDir: base + "/no-temp", registry: registry)
     ctx.staleProjectDays = 30
+    ctx.aiStrayMinSize = 1_000_000
     let c = Classifier.classify(tree, context: ctx)
     func names(_ cat: CleanupCategory) -> Set<String> { Set((c.items[cat] ?? []).map(\.name)) }
     check(names(.caches).contains("com.example.browser"), "app cache found")
@@ -135,6 +154,14 @@ section("Classifier") {
     check(names(.developer).contains("node_modules"), "stale node_modules")
     check(names(.downloads).contains("installer.dmg"), "installer in Downloads")
     check(!names(.downloads).contains("new-notes.txt"), "recent download kept")
+    check(names(.aiModels).isSuperset(of: ["Ollama models", "Qwen-7B-GGUF", "openai/whisper-small", "llama-7b.Q4.gguf"]),
+          "AI models found: \(names(.aiModels))")
+    check(c.items[.aiModels]?.first { $0.name == "Ollama models" }?.detail.contains("llama3:latest") == true,
+          "Ollama model names read from manifests")
+    check(names(.developer).contains("pip") && !names(.developer).contains("huggingface"),
+          "model caches leave Developer files; other tool caches stay")
+    let allPaths = c.allItems.map(\.path)
+    check(Set(allPaths).count == allPaths.count, "no item listed twice")
     let total = c.clearableTotal + c.kept.values.reduce(0, +)
     check(total == tree.root.size, "clearable + kept = scanned (\(total) vs \(tree.root.size))")
     check((c.kept[.media] ?? 0) > 0, "media kept bucket")
@@ -161,6 +188,22 @@ section("App data ownership") {
     check(mainPaths.contains("Plain Name"), "folder named after the app goes to that app")
     check(mainPaths.contains("com.gone.app") && mainPaths.contains("com.gone.app.plist"), "bundle id matches")
     check(owned[1] == nil, "helper claims nothing it does not own: \(owned[1]?.map(\.path) ?? [])")
+}
+
+section("App caches") {
+    let container = home + "/Library/Containers/com.gone.app"
+    try FileManager.default.createDirectory(atPath: container + "/Data/Library/Caches/x", withIntermediateDirectories: true)
+    try Data(count: 50_000).write(to: URL(fileURLWithPath: container + "/Data/Library/Caches/x/blob"))
+    let data = [
+        AppFile(path: home + "/Library/Caches/com.example.browser", size: 5_000_000, kind: "Caches"),
+        AppFile(path: home + "/Library/Application Support/com.gone.app", size: 1_500_000, kind: "Application Support"),
+        AppFile(path: home + "/Library/Preferences/com.gone.app.plist", size: 4_000, kind: "Preferences"),
+        AppFile(path: home + "/Library/HTTPStorages/com.gone.app", size: 10_000, kind: "Web storage"),
+        AppFile(path: container, size: 60_000, kind: "Container"),
+    ]
+    let caches = Set(AppInventory.cacheFiles(from: data).map { PathFormat.abbreviated($0.path, home: home) })
+    check(caches == ["~/Library/Caches/com.example.browser", "~/Library/HTTPStorages/com.gone.app",
+                     "~/Library/Containers/com.gone.app/Data/Library/Caches"], "cache paths: \(caches)")
 }
 
 section("SafetyGuard") {
@@ -271,6 +314,51 @@ section("Concurrent readers while removing") {
     stop.set()
     group.wait()
     check(removed > 10 && t.root.size == 0, "removed every file while three readers searched (\(removed))")
+}
+
+section("Saved search index") {
+    let t = DiskScanner(rootPath: home).scanSync()!
+    let dir = URL(fileURLWithPath: base + "/index")
+    try ScanIndex.save(t, in: dir)
+    let loaded = ScanIndex.load(root: home, in: dir)
+    check(loaded != nil, "index loads")
+    if let loaded {
+        check(loaded.stats.files == t.stats.files && loaded.root.size == t.root.size,
+              "same files and size (\(loaded.stats.files) / \(loaded.root.size))")
+        check(loaded.root.mediaSize == t.root.mediaSize, "media totals rebuilt")
+        check(loaded.rootPath == t.rootPath && loaded.ref(forPath: home + "/Documents/.hidden-config")?.file?.hidden == true,
+              "paths and hidden flags survive")
+        let a = TreeSearch.run(t, SearchQuery(text: "beach")).map(\.ref.path).sorted()
+        let b = TreeSearch.run(loaded, SearchQuery(text: "beach")).map(\.ref.path).sorted()
+        check(!a.isEmpty && a == b, "search results match")
+    }
+    check(ScanIndex.load(root: home + "/Documents", in: dir) == nil, "no index for another root")
+    try Data("garbage".utf8).write(to: ScanIndex.url(forRoot: home + "/Pictures", in: dir))
+    check(ScanIndex.load(root: home + "/Pictures", in: dir) == nil, "corrupt index is ignored")
+}
+
+section("Treemap layout") {
+    let bounds = CGRect(x: 10, y: 20, width: 600, height: 400)
+    let values: [Double] = [500, 300, 120, 80, 40, 30, 20, 6, 3, 1]
+    let rects = Treemap.squarify(values, in: bounds)
+    let total = values.reduce(0, +)
+    let area = Double(bounds.width * bounds.height)
+    var proportional = true, inside = true, overlap = false
+    for (i, r) in rects.enumerated() {
+        let expected = values[i] / total * area
+        if abs(Double(r.width * r.height) - expected) > expected * 0.01 + 0.01 { proportional = false }
+        if !bounds.insetBy(dx: -0.01, dy: -0.01).contains(r) { inside = false }
+        for other in rects[(i + 1)...] {
+            let x = r.intersection(other)
+            if !x.isNull && x.width * x.height > 0.01 { overlap = true }
+        }
+    }
+    check(proportional, "areas proportional to values")
+    check(inside, "rects stay inside bounds")
+    check(!overlap, "rects do not overlap")
+    let worst = rects.prefix(5).map { max($0.width / $0.height, $0.height / $0.width) }.max() ?? 0
+    check(worst < 4, "large rects stay close to square (worst \(worst))")
+    check(Treemap.squarify([], in: bounds).isEmpty && Treemap.squarify([5], in: .zero) == [.zero], "empty inputs")
 }
 
 section("References outliving their tree") {

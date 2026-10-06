@@ -45,6 +45,13 @@ enum Fixture {
         try file("Projects/web/package.json", bytes: 200, date: old)
         try file("Projects/web/node_modules/lib/index.js", bytes: 2_500_000, date: old)
         try touchDir("Projects/web", old)
+        // Local AI models.
+        try file(".ollama/models/manifests/registry.ollama.ai/library/llama3/latest", bytes: 500)
+        try file(".ollama/models/blobs/sha256-0f3a", bytes: 2_000_000)
+        try file(".lmstudio/models/lmstudio-community/Qwen-7B-GGUF/qwen-7b.Q4.gguf", bytes: 2_000_000)
+        try file(".cache/huggingface/hub/models--openai--whisper-small/blobs/9a1c", bytes: 1_500_000)
+        try file(".cache/pip/http/wheel", bytes: 1_000_000)
+        try file("Documents/llama-7b.Q4.gguf", bytes: 2_000_000)
         try file("Documents/Quarterly REPORT.pdf", bytes: 900_000)
         try file("Documents/.hidden-config", bytes: 1_000)
         try file("Pictures/beach.jpg", bytes: 3_000_000, fill: 7)

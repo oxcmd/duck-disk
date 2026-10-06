@@ -14,8 +14,10 @@ struct SettingsView: View {
 }
 
 private struct GeneralSettings: View {
+    @Environment(AppModel.self) private var model
     @AppStorage(Prefs.appearance) private var appearance = "system"
     @AppStorage(Prefs.autoSnapshot) private var autoSnapshot = true
+    @AppStorage(Prefs.keepIndex) private var keepIndex = true
     @State private var excluded: [String] = Prefs.excluded
 
     var body: some View {
@@ -26,6 +28,10 @@ private struct GeneralSettings: View {
                 Text("Dark").tag("dark")
             }
             Toggle("Save a snapshot after every scan", isOn: $autoSnapshot)
+            Toggle("Remember file names for Find between launches", isOn: $keepIndex)
+                .onChange(of: keepIndex) { _, on in
+                    if on { model.loadIndex() } else { model.forgetIndexes() }
+                }
             Section("Never scan these folders") {
                 List {
                     ForEach(excluded, id: \.self) { path in
@@ -108,7 +114,7 @@ private struct PrivacySettings: View {
                     .foregroundStyle(.secondary)
             }
             Section("What leaves your Mac") {
-                Text("Nothing. Duck Disk has no account, no sync, no analytics and makes no network requests. Scan results, snapshots and history stay in ~/Library/Application Support/Duck Disk.")
+                Text("Nothing. Duck Disk has no account, no sync, no analytics and makes no network requests. Snapshots, cleanup history and the Find index stay in ~/Library/Application Support/Duck Disk.")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
             }

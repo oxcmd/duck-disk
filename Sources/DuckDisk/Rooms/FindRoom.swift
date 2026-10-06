@@ -18,17 +18,29 @@ struct FindRoom: View {
                                             ("Over 1 GB", 1_000_000_000)]
 
     var body: some View {
-        if let tree = model.tree {
+        if let tree = model.searchTree {
             content(tree)
         } else {
             NeedsScanView(message: "Scan a drive and Find searches every file name on it as you type, hidden folders too.")
         }
     }
 
+    /// Shown when results come from the saved index rather than a scan made in this session.
+    private var indexNote: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "clock.arrow.circlepath")
+            Text("Searching the index from \(DateFormat.relativeString(model.indexTree?.startedAt ?? Date())). Scan again for fresh results.")
+            if model.phase == .scanning || model.phase == .analysing { ProgressView().controlSize(.mini) }
+        }
+        .font(.system(size: 11))
+        .foregroundStyle(Theme.textSecondary)
+    }
+
     private func content(_ tree: ScanTree) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 12) {
                 RoomHeader(title: "Find")
+                if model.tree == nil && model.indexTree != nil { indexNote }
                 HStack(spacing: 10) {
                     Image(systemName: "magnifyingglass").foregroundStyle(Theme.textSecondary)
                     TextField("Search \(tree.stats.files.formatted()) files", text: $text)
@@ -117,9 +129,12 @@ struct FindRoom: View {
         searching = true
         let cancelled = CancelFlag()
         let started = Date()
+        let fromIndex = model.tree == nil
         let result = await withTaskCancellationHandler {
             await Task.detached(priority: .userInitiated) {
-                TreeSearch.run(tree, query) { cancelled.isSet }
+                let hits = TreeSearch.run(tree, query) { cancelled.isSet }
+                // A saved index can list files that have gone since; show only what still exists.
+                return fromIndex ? hits.filter { access($0.ref.path, F_OK) == 0 } : hits
             }.value
         } onCancel: {
             cancelled.set()

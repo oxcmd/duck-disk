@@ -7,6 +7,8 @@ public struct ClassifierContext: Sendable {
     public var oldDownloadDays: Int = 90
     public var staleProjectDays: Int = 30
     public var tempAgeDays: Int = 3
+    /// Loose model files (.gguf, .safetensors…) outside known model folders count from this size.
+    public var aiStrayMinSize: Int64 = 100_000_000
     public var now: Date = Date()
     public var registry: InstalledAppRegistry
 
@@ -37,6 +39,26 @@ public enum Classifier {
                                   "go/pkg/mod", ".m2/repository", ".pub-cache", ".bun/install/cache",
                                   "Library/pnpm/store", ".pnpm-store", ".cocoapods/repos", ".nuget/packages",
                                   ".android/cache", ".expo"]
+    /// Folders under ~/.cache that hold AI models; they are listed under AI models, not Developer files.
+    static let aiCacheFolders: Set<String> = ["huggingface", "lm-studio", "whisper", "torch"]
+    /// Model folders: home-relative path, depth of the items below it, and the app that owns them.
+    static let aiModelFolders: [(path: String, depth: Int, app: String)] = [
+        (".lmstudio/models", 2, "LM Studio"), (".cache/lm-studio/models", 2, "LM Studio"),
+        ("Library/Application Support/nomic.ai/GPT4All", 1, "GPT4All"),
+        ("jan/models", 1, "Jan"), ("Library/Application Support/Jan/data/models", 2, "Jan"),
+        ("Library/Containers/com.liuliu.draw-things/Data/Documents/Models", 1, "Draw Things"),
+        (".diffusionbee/downloads", 1, "DiffusionBee"),
+        ("Library/Application Support/MacWhisper/models", 1, "MacWhisper"),
+        (".cache/whisper", 1, "Whisper"), (".cache/torch/hub/checkpoints", 1, "PyTorch"),
+    ]
+    /// Model stores whose files are shared between models, so the whole folder is one item.
+    static let aiModelStores: [(path: String, app: String)] = [
+        (".ollama/models", "Ollama"), ("Library/Application Support/Msty/models", "Msty"),
+    ]
+    static let aiModelExtensions: Set<String> = ["gguf", "ggml", "safetensors", "ckpt"]
+    /// GPT4All keeps databases next to its models; only these count there.
+    static let gpt4allModelExtensions: Set<String> = ["gguf", "bin"]
+
     /// Build-output folders and the project file that must sit next to them.
     static let projectBuildFolders: [String: String] = ["node_modules": "package.json", ".build": "Package.swift",
                                                         "target": "Cargo.toml", "Pods": "Podfile"]
@@ -92,7 +114,8 @@ public enum Classifier {
 
         // Developer files
         for folder in developerFolders {
-            for ref in children(tree, ctx.home + "/" + folder) {
+            for ref in children(tree, ctx.home + "/" + folder)
+            where !(folder == ".cache" && aiCacheFolders.contains(ref.name)) {
                 found.append(item(ref, .developer, detail: developerDetail(folder)))
             }
         }
@@ -102,6 +125,9 @@ public enum Classifier {
             }
         }
         found += staleBuildFolders(tree, ctx)
+
+        // AI models
+        found += aiModels(tree, ctx)
 
         // Old downloads
         found += oldDownloads(tree, ctx)
@@ -183,6 +209,63 @@ public enum Classifier {
             }
         }
         return out
+    }
+
+    static func aiModels(_ tree: ScanTree, _ ctx: ClassifierContext) -> [CleanupItem] {
+        var out: [CleanupItem] = []
+        for store in aiModelStores {
+            guard let node = tree.node(atPath: ctx.home + "/" + store.path), node.size > 0 else { continue }
+            let names = ollamaModelNames(node)
+            let detail = names.isEmpty ? store.app : "\(store.app) · \(names.joined(separator: ", "))"
+            out.append(CleanupItem(path: node.path, ref: ItemRef(dir: node), category: .aiModels, size: node.size,
+                                   name: "\(store.app) models", detail: detail, modified: node.modifiedDate))
+        }
+        for folder in aiModelFolders {
+            var level = children(tree, ctx.home + "/" + folder.path)
+            for _ in 1..<folder.depth {
+                level = level.filter(\.isDirectory).flatMap { children(tree, $0.path) }
+            }
+            for ref in level {
+                if folder.app == "GPT4All" && !ref.isDirectory
+                    && !gpt4allModelExtensions.contains(FileKinds.lowercasedExtension(ref.name)) { continue }
+                out.append(item(ref, .aiModels, detail: folder.app))
+            }
+        }
+        for ref in children(tree, ctx.home + "/.cache/huggingface/hub")
+        where ref.isDirectory && (ref.name.hasPrefix("models--") || ref.name.hasPrefix("datasets--")) {
+            let parts = ref.name.components(separatedBy: "--").dropFirst()
+            let kind = ref.name.hasPrefix("datasets--") ? "Hugging Face dataset" : "Hugging Face"
+            out.append(CleanupItem(path: ref.path, ref: ref, category: .aiModels, size: ref.size,
+                                   name: parts.joined(separator: "/"), detail: kind, modified: ref.modified))
+        }
+        // Loose model files anywhere in the home folder.
+        if let home = tree.node(atPath: ctx.home) ?? (PathFormat.isInside(tree.rootPath, ctx.home) ? tree.root : nil) {
+            var stack = [home]
+            while let dir = stack.popLast() {
+                for f in tree.files(of: dir) where !f.removed && f.size >= ctx.aiStrayMinSize
+                    && aiModelExtensions.contains(FileKinds.lowercasedExtension(f.name)) {
+                    let ref = ItemRef(dir: dir, fileName: f.name)
+                    out.append(item(ref, .aiModels, detail: "Model file"))
+                }
+                stack.append(contentsOf: dir.subdirs.filter { !$0.isRemoved })
+            }
+        }
+        return out
+    }
+
+    /// Model names from an Ollama store: manifests/<registry>/<namespace>/<model>/<tag>.
+    static func ollamaModelNames(_ store: DirNode) -> [String] {
+        guard let manifests = store.subdir(named: "manifests") else { return [] }
+        var names: [String] = []
+        for registry in manifests.subdirs {
+            for namespace in registry.subdirs {
+                for model in namespace.subdirs {
+                    let tags = model.files.map(\.name)
+                    names += tags.isEmpty ? [model.name] : tags.map { "\(model.name):\($0)" }
+                }
+            }
+        }
+        return names.sorted()
     }
 
     static func days(since seconds: Double, _ ctx: ClassifierContext) -> Int {

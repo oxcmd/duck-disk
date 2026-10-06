@@ -30,12 +30,15 @@ public struct AppInfo: Identifiable, Sendable {
     public let bundleSize: Int64
     public let lastUsed: Date?
     public let leftovers: [AppFile]
+    /// The part of the app's data that is safe to clear: caches and web storage, never settings or documents.
+    public let caches: [AppFile]
     public let background: [BackgroundItem]
     public let isApple: Bool
 
     public var leftoverSize: Int64 { leftovers.reduce(0) { $0 + $1.size } }
     public var footprint: Int64 { bundleSize + leftoverSize }
     public var isRunning: Bool { background.contains { $0.kind == .process } }
+    public var cacheSize: Int64 { caches.reduce(0) { $0 + $1.size } }
 }
 
 /// Builds the Applications room: every app, its data across ~/Library, and what runs in the background.
@@ -151,7 +154,23 @@ public enum AppInventory {
         }
         return AppInfo(path: appPath, name: app.name, bundleID: app.bundleID, version: app.version,
                        bundleSize: DirectorySize.of(appPath), lastUsed: lastUsedDate(appPath),
-                       leftovers: leftovers.sorted { $0.size > $1.size }, background: background, isApple: isApple)
+                       leftovers: leftovers.sorted { $0.size > $1.size }, caches: cacheFiles(from: leftovers),
+                       background: background, isApple: isApple)
+    }
+
+    static let cacheKinds: Set<String> = ["Caches", "Web storage", "Web data"]
+
+    /// Cache folders among an app's data, plus the Caches folder inside each of its sandbox containers.
+    static func cacheFiles(from data: [AppFile]) -> [AppFile] {
+        var out = data.filter { cacheKinds.contains($0.kind) }
+        for container in data where container.kind == "Container" {
+            let caches = container.path + "/Data/Library/Caches"
+            var isDir: ObjCBool = false
+            if FileManager.default.fileExists(atPath: caches, isDirectory: &isDir), isDir.boolValue {
+                out.append(AppFile(path: caches, size: DirectorySize.of(caches), kind: "Container cache"))
+            }
+        }
+        return out.filter { $0.size > 0 }.sorted { $0.size > $1.size }
     }
 
     static func lastUsedDate(_ path: String) -> Date? {

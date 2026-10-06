@@ -2,7 +2,7 @@ import Foundation
 
 /// Space that could be cleared, grouped the way the Overview presents it.
 public enum CleanupCategory: String, CaseIterable, Codable, Sendable, Identifiable {
-    case caches, logs, leftovers, developer, downloads, duplicates
+    case caches, logs, leftovers, developer, aiModels, downloads, duplicates
 
     public var id: String { rawValue }
 
@@ -11,7 +11,7 @@ public enum CleanupCategory: String, CaseIterable, Codable, Sendable, Identifiab
     public var group: Group {
         switch self {
         case .caches, .logs, .leftovers: return .safe
-        case .developer, .downloads, .duplicates: return .review
+        case .developer, .aiModels, .downloads, .duplicates: return .review
         }
     }
 
@@ -21,6 +21,7 @@ public enum CleanupCategory: String, CaseIterable, Codable, Sendable, Identifiab
         case .logs: return "Logs and temp files"
         case .leftovers: return "App leftovers"
         case .developer: return "Developer files"
+        case .aiModels: return "AI models"
         case .downloads: return "Old downloads"
         case .duplicates: return "Duplicates"
         }
@@ -37,6 +38,8 @@ public enum CleanupCategory: String, CaseIterable, Codable, Sendable, Identifiab
             return "Settings and data left behind by apps that are no longer installed."
         case .developer:
             return "Build products, simulator caches and package caches. Tools re-create them, but rebuilding takes time."
+        case .aiModels:
+            return "Model files downloaded by apps like Ollama, LM Studio and Hugging Face. They can be downloaded again, but they are big."
         case .downloads:
             return "Installers and files in Downloads you have not touched for a long time."
         case .duplicates:
@@ -50,6 +53,7 @@ public enum CleanupCategory: String, CaseIterable, Codable, Sendable, Identifiab
         case .logs: return "doc.text"
         case .leftovers: return "puzzlepiece.extension"
         case .developer: return "hammer"
+        case .aiModels: return "brain"
         case .downloads: return "arrow.down.circle"
         case .duplicates: return "doc.on.doc"
         }
