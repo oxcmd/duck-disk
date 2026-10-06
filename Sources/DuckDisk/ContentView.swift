@@ -131,21 +131,15 @@ private struct VolumeFooter: View {
     }
 }
 
-/// The ring-and-duck mark used in the sidebar and empty states.
+/// The ring-and-duck mark used in the sidebar and empty states; the same drawing as the app icon.
 struct LogoMark: View {
     var size: CGFloat = 20
     var body: some View {
-        ZStack {
-            Circle()
-                .stroke(AngularGradient(colors: [Theme.color(.caches), Theme.color(.leftovers),
-                                                 Theme.color(.developer), Theme.color(.downloads),
-                                                 Theme.color(.caches)], center: .center),
-                        lineWidth: size * 0.16)
-            Image(systemName: "bird.fill")
-                .font(.system(size: size * 0.42, weight: .bold))
-                .foregroundStyle(Color(nsColor: NSColor(hex: 0xFFC93C)))
-        }
-        .frame(width: size, height: size)
+        Image(nsImage: DuckArtwork.mark)
+            .resizable()
+            .interpolation(.high)
+            .frame(width: size, height: size)
+            .accessibilityLabel("Duck Disk")
     }
 }
 
