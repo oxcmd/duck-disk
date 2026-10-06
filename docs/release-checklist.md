@@ -52,7 +52,9 @@ Run through this list before publishing a build. Duck Disk moves people's files,
 - [ ] A helper app whose bundle name repeats another app's name (for example Claude Code URL Handler next to Claude) does not list that app's data folders.
 - [ ] Uninstall a small test app that is running: the app asks to quit it first, then the app and its data are in the Trash.
 - [ ] Apple apps cannot be uninstalled.
-- [ ] Clear Cache on a running app asks to quit it first, then moves only caches and web data to the Trash; the app keeps its settings.
+- [ ] Clear Cache on a running app asks to quit it first, then moves only caches to the Trash; the app keeps its settings and stays signed in.
+- [ ] Reset Web Data warns about signing out, then moves the app's cookies and website storage to the Trash.
+- [ ] If an app refuses to quit (for example with unsaved work), nothing is moved and Duck Disk says so.
 
 ## 7. Monitor
 

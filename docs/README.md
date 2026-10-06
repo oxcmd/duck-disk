@@ -13,7 +13,7 @@ Requires macOS 14 or later. Builds with the Swift 6 Command Line Tools; Xcode is
 | Space | Drills into folders largest-first, shows the drive as a treemap (by size, file count or age, with adjustable depth), or lists the largest files. |
 | Cleanup | Caches, logs, app leftovers, developer files, local AI models (Ollama, LM Studio, Hugging Face and others) and old downloads, grouped, totalled and selectable item by item. |
 | Duplicates | Files with identical contents (size → partial hash → full SHA-256). Hard links and APFS clones are not counted as waste. One copy per set is always kept. |
-| Applications | Every app with its data across `~/Library`, launch agents and running processes. Clear Cache removes only caches and web data; Uninstall moves the app and its data to the Trash. |
+| Applications | Every app with its data across `~/Library`, launch agents and running processes. Clear Cache removes only caches; Reset Web Data removes cookies and website storage, which usually signs you out; Uninstall moves the app and its data to the Trash. A running app is asked to quit first. |
 | Monitor | Live CPU, memory, top processes, listening ports and battery health. |
 | Compress | Re-encodes videos (HEVC/H.264) and photos (HEIC). A result is kept only when it is smaller; originals go to the Trash. |
 | Activity | Space recovered per week, a log of cleanups, and snapshot comparisons that show which folders grew or shrank. |
