@@ -19,28 +19,28 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0.0</string>
+	<string>1.1.0</string>
 	<key>CFBundleVersion</key>
-	<string>1</string>
+	<string>2</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.utilities</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
-	<key>NSHighResolutionCapable</key>
-	<true/>
-	<key>NSPrincipalClass</key>
-	<string>NSApplication</string>
-	<key>NSHumanReadableCopyright</key>
-	<string>Duck Disk. Nothing leaves your Mac.</string>
 	<key>NSDesktopFolderUsageDescription</key>
 	<string>Duck Disk measures the files on your Desktop to show where your disk space went.</string>
 	<key>NSDocumentsFolderUsageDescription</key>
 	<string>Duck Disk measures the files in Documents to show where your disk space went.</string>
 	<key>NSDownloadsFolderUsageDescription</key>
 	<string>Duck Disk measures Downloads to find old installers and files you no longer use.</string>
-	<key>NSRemovableVolumesUsageDescription</key>
-	<string>Duck Disk can scan external drives you choose.</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>Duck Disk. Nothing leaves your Mac.</string>
 	<key>NSNetworkVolumesUsageDescription</key>
 	<string>Duck Disk can scan network drives you choose.</string>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<key>NSRemovableVolumesUsageDescription</key>
+	<string>Duck Disk can scan external drives you choose.</string>
 </dict>
 </plist>
