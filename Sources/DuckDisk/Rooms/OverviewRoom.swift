@@ -26,10 +26,10 @@ private struct StartView: View {
             Spacer()
             LogoMark(size: 72)
             VStack(spacing: 8) {
-                Text("Find out where the space went.")
+                Text("See what is filling your disk.")
                     .font(Theme.figure(30, weight: .bold))
                     .foregroundStyle(Theme.textPrimary)
-                Text("Duck Disk maps every byte of \(model.target.name), then shows what you keep in grey and what you could clear in colour. Nothing is deleted — cleared items go to the Trash.")
+                Text("Duck Disk measures \(model.target.name) file by file. What stays is shown in grey, what could go is shown in colour, and anything you clear lands in the Trash so you can put it back.")
                     .font(.system(size: 14))
                     .foregroundStyle(Theme.textSecondary)
                     .multilineTextAlignment(.center)
