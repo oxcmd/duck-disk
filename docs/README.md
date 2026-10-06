@@ -24,13 +24,34 @@ Requires macOS 14 or later. Builds with the Swift 6 Command Line Tools; Xcode is
 scripts/package-app.sh
 ```
 
-This creates `dist/Duck Disk.app` (ad-hoc signed). Add `--dmg` to also create `dist/DuckDisk.dmg`.
+This builds for Apple silicon and creates `dist/Duck Disk.app`. Add `--dmg` to also create `dist/DuckDisk-<version>.dmg`. The version comes from `Resources/Info.plist`.
 
 ```bash
 open "dist/Duck Disk.app"
 ```
 
 During development you can also run the executable directly with `swift run DuckDisk`.
+
+### Signing and notarization
+
+The script picks the signing mode on its own:
+
+- **Developer ID:** when a "Developer ID Application" certificate is in the keychain (or `DEVELOPER_ID` names one), the app and disk image are signed with the hardened runtime. If `NOTARY_PROFILE` is also set, both are notarized and stapled, and other Macs open them without a warning.
+- **Ad-hoc:** without a certificate the app runs on this Mac, but other Macs show a Gatekeeper warning. People can still open it from System Settings → Privacy & Security → Open Anyway.
+
+To set up notarization once (it needs a paid Apple Developer account and an app-specific password):
+
+```bash
+xcrun notarytool store-credentials duckdisk --apple-id <apple-id> --team-id <team-id> --password <app-specific-password>
+```
+
+Then package with:
+
+```bash
+NOTARY_PROFILE=duckdisk scripts/package-app.sh --dmg
+```
+
+Before publishing, work through the [release checklist](release-checklist.md).
 
 ## Full Disk Access
 
@@ -67,7 +88,7 @@ Sources/DuckDisk/        SwiftUI app: AppModel, theme, the nine rooms, inspector
 Sources/DuckDiskChecks/  check runner with a fixture home folder
 Resources/Info.plist     bundle metadata and privacy usage strings
 scripts/package-app.sh   release build and .app assembly
-scripts/make-icon.swift  renders the app icon
+scripts/make-icon.swift  renders the app icon from Sources/DuckDisk/DuckArtwork.swift
 ```
 
 ## Checks
