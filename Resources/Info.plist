@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleDisplayName</key>
+	<string>Duck Disk</string>
+	<key>CFBundleExecutable</key>
+	<string>DuckDisk</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>app.duckdisk.DuckDisk</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>Duck Disk</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.utilities</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>Duck Disk. Nothing leaves your Mac.</string>
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>Duck Disk measures the files on your Desktop to show where your disk space went.</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>Duck Disk measures the files in Documents to show where your disk space went.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>Duck Disk measures Downloads to find old installers and files you no longer use.</string>
+	<key>NSRemovableVolumesUsageDescription</key>
+	<string>Duck Disk can scan external drives you choose.</string>
+	<key>NSNetworkVolumesUsageDescription</key>
+	<string>Duck Disk can scan network drives you choose.</string>
+</dict>
+</plist>

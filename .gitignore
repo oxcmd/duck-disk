@@ -1,0 +1,10 @@
+.DS_Store
+
+# SwiftPM build output and packaged app
+/.build/
+/.swiftpm/
+/dist/
+
+# Local agent tooling installed per machine
+/.claude/
+/.agentkit/
