@@ -114,9 +114,20 @@ private struct AppDetail: View {
     /// The action waiting for the running app to quit.
     @State private var pendingAfterQuit: AfterQuit?
 
+    @State private var confirmWebReset = false
+    @State private var quitFailed = false
+
     enum AfterQuit: Identifiable {
-        case uninstall, clearCache
+        case uninstall, clearCache, resetWebData
         var id: Self { self }
+
+        var button: String {
+            switch self {
+            case .uninstall: return "Quit and Uninstall"
+            case .clearCache: return "Quit and Clear Cache"
+            case .resetWebData: return "Quit and Reset Web Data"
+            }
+        }
     }
 
     var body: some View {
@@ -225,12 +236,15 @@ private struct AppDetail: View {
                     }
                     .buttonStyle(QuietButtonStyle())
                 }
-                Button("Clear Cache (\(ByteFormat.string(app.cacheSize)))") {
-                    if app.isRunning { pendingAfterQuit = .clearCache } else { askClearCache() }
+                if app.webDataSize > 0 {
+                    Button("Reset Web Data (\(ByteFormat.string(app.webDataSize)))") { confirmWebReset = true }
+                        .buttonStyle(QuietButtonStyle())
+                        .help("Moves the app's cookies and website data to the Trash. You will probably be signed out.")
                 }
-                .buttonStyle(QuietButtonStyle())
-                .disabled(app.cacheSize == 0)
-                .help("Moves the app's caches and web data to the Trash. Settings and documents stay.")
+                Button("Clear Cache (\(ByteFormat.string(app.cacheSize)))") { run(.clearCache) }
+                    .buttonStyle(QuietButtonStyle())
+                    .disabled(app.cacheSize == 0)
+                    .help("Moves the app's caches to the Trash. Settings, documents and sign-ins stay.")
                 Button("Uninstall…") { uninstall() }
                     .buttonStyle(PrimaryButtonStyle())
                     .disabled(app.isApple || !SafetyGuard.check(app.path).isAllowed)
@@ -242,18 +256,27 @@ private struct AppDetail: View {
         .alert("Quit \(app.name) first?", isPresented: Binding(get: { pendingAfterQuit != nil },
                                                                set: { if !$0 { pendingAfterQuit = nil } }),
                presenting: pendingAfterQuit) { action in
-            Button(action == .uninstall ? "Quit and Uninstall" : "Quit and Clear Cache") {
-                quit()
+            Button(action.button) {
                 Task {
-                    try? await Task.sleep(nanoseconds: 1_500_000_000)
-                    if action == .uninstall { askUninstall() } else { askClearCache() }
+                    if await quitAndWait() { perform(action) } else { quitFailed = true }
                 }
             }
             Button("Cancel", role: .cancel) {}
         } message: { action in
             Text(action == .uninstall
                  ? "\(app.name) is running. It needs to quit before it can go to the Trash."
-                 : "\(app.name) is running. Quit it first so it does not write to its cache while it is cleared.")
+                 : "\(app.name) is running. Quit it first so it does not write to its data while it is cleared.")
+        }
+        .alert("Reset web data for \(app.name)?", isPresented: $confirmWebReset) {
+            Button("Reset Web Data", role: .destructive) { run(.resetWebData) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Cookies and website storage go to the Trash. \(app.name) will probably sign you out, and web-based settings inside it may reset.")
+        }
+        .alert("\(app.name) is still running", isPresented: $quitFailed) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("It did not quit, so nothing was moved. Quit it yourself (it may be waiting for you to save something), then try again.")
         }
     }
 
@@ -269,20 +292,47 @@ private struct AppDetail: View {
         .card(padding: 12)
     }
 
+    /// The app's processes as they are now, not as they were when the list was measured.
+    private var runningInstances: [NSRunningApplication] {
+        NSWorkspace.shared.runningApplications.filter {
+            $0.bundleURL?.path == app.path || $0.bundleIdentifier == app.bundleID
+                || $0.bundleURL.map { PathFormat.isInside($0.path, app.path) } == true
+        }
+    }
+
     private func quit() {
-        let pids = Set(app.background.compactMap(\.pid))
-        for running in NSWorkspace.shared.runningApplications
-        where running.bundleURL?.path == app.path || pids.contains(running.processIdentifier) {
-            running.terminate()
+        runningInstances.forEach { $0.terminate() }
+    }
+
+    /// Asks the app to quit and waits up to five seconds for it to be gone.
+    private func quitAndWait() async -> Bool {
+        quit()
+        for _ in 0..<25 {
+            if runningInstances.isEmpty { return true }
+            try? await Task.sleep(nanoseconds: 200_000_000)
+        }
+        return runningInstances.isEmpty
+    }
+
+    /// Runs an action now, or after asking to quit the app if it is running.
+    private func run(_ action: AfterQuit) {
+        if runningInstances.isEmpty { perform(action) } else { pendingAfterQuit = action }
+    }
+
+    private func perform(_ action: AfterQuit) {
+        switch action {
+        case .uninstall: askUninstall()
+        case .clearCache: askTrash(app.caches)
+        case .resetWebData: askTrash(app.webData)
         }
     }
 
     private func uninstall() {
-        if app.isRunning { pendingAfterQuit = .uninstall } else { askUninstall() }
+        run(.uninstall)
     }
 
-    private func askClearCache() {
-        model.askTrash(paths: app.caches.map { ($0.path, $0.size) }, source: "Applications") { _ in
+    private func askTrash(_ files: [AppFile]) {
+        model.askTrash(paths: files.map { ($0.path, $0.size) }, source: "Applications") { _ in
             model.loadApps(force: true)
         }
     }

@@ -81,27 +81,24 @@ struct InspectorView: View {
                 row("Safety", verdict.reason ?? "Can go to the Trash")
             }
 
-            if let ref = item.ref, ref.isDirectory {
-                let inside = Array(ref.dir.sortedChildren.prefix(3))
-                if !inside.isEmpty {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Largest inside").font(.system(size: 11)).foregroundStyle(Theme.textTertiary)
-                        ForEach(inside, id: \.self) { child in
-                            Button {
-                                model.inspected = InspectedItem(path: child.path, ref: child)
-                            } label: {
-                                HStack(spacing: 6) {
-                                    FileIcon(path: child.path, size: 14)
-                                    Text(child.name).lineLimit(1).truncationMode(.middle)
-                                    Spacer()
-                                    Text(ByteFormat.string(child.size)).monospacedDigit()
-                                        .foregroundStyle(Theme.textSecondary)
-                                }
-                                .font(.system(size: 12))
-                                .contentShape(Rectangle())
+            if let inside = details?.largestInside, !inside.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Largest inside").font(.system(size: 11)).foregroundStyle(Theme.textTertiary)
+                    ForEach(inside, id: \.self) { child in
+                        Button {
+                            model.inspected = InspectedItem(path: child.path, ref: child)
+                        } label: {
+                            HStack(spacing: 6) {
+                                FileIcon(path: child.path, size: 14)
+                                Text(child.name).lineLimit(1).truncationMode(.middle)
+                                Spacer()
+                                Text(ByteFormat.string(child.size)).monospacedDigit()
+                                    .foregroundStyle(Theme.textSecondary)
                             }
-                            .buttonStyle(.plain)
+                            .font(.system(size: 12))
+                            .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
                     }
                 }
             }
@@ -157,11 +154,14 @@ struct FileDetails: Sendable {
     var modified: Date?
     var opened: Date?
     var created: Date?
+    /// The three biggest things in a folder, worked out once per selection rather than on every redraw.
+    var largestInside: [ItemRef] = []
 
     static func load(_ item: InspectedItem) async -> FileDetails {
         let path = item.path
         let count = item.ref?.itemCount
         let knownSize = item.ref?.size
+        let inside = item.ref.map { $0.isDirectory ? Array($0.dir.sortedChildren.prefix(3)) : [] } ?? []
         return await Task.detached(priority: .userInitiated) {
             var d = FileDetails()
             let url = URL(fileURLWithPath: path)
@@ -175,6 +175,7 @@ struct FileDetails: Sendable {
             d.created = v?.creationDate
             d.size = knownSize ?? DirectorySize.of(path)
             d.itemCount = count ?? 0
+            d.largestInside = inside
             return d
         }.value
     }

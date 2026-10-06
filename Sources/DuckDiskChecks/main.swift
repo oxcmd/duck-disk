@@ -3,6 +3,7 @@
 // Usage: swift run DuckDiskChecks [--apps] | --fixture-only <dir ending in duckdisk-fixture> | --scan <path>
 import AVFoundation
 import CoreGraphics
+import CryptoKit
 import Darwin
 @testable import DuckDiskCore
 import Foundation
@@ -139,7 +140,8 @@ section("Scanner") {
 }
 
 section("Classifier") {
-    let registry = InstalledAppRegistry(entries: [], extraIDs: ["com.example.browser"], useLaunchServices: false)
+    let registry = InstalledAppRegistry(entries: [], extraIDs: ["com.example.browser", "com.liuliu.draw-things"],
+                                        useLaunchServices: false)
     var ctx = ClassifierContext(home: home, tempDir: base + "/no-temp", registry: registry)
     ctx.staleProjectDays = 30
     ctx.aiStrayMinSize = 1_000_000
@@ -158,6 +160,12 @@ section("Classifier") {
           "AI models found: \(names(.aiModels))")
     check(!names(.aiModels).contains("style.safetensors"), "model files inside app bundles are left alone")
     check(!names(.aiModels).contains("old-model.gguf"), "files already in the Trash are not listed")
+    check(names(.aiModels).contains("sd_v1.5_f16.ckpt") && !names(.aiModels).contains("custom_configs.json"),
+          "model folders list model files, not settings")
+    check(!names(.aiModels).contains("localdocs_v2.db"), "GPT4All databases stay")
+    check(!names(.aiModels).contains("shared.gguf"), "loose files under ~/Library (iCloud, app data) are not listed")
+    check(c.items[.aiModels]?.first { $0.name == "llama-7b.Q4.gguf" }?.detail.contains("check") == true,
+          "loose model files ask the user to check them")
     check(c.items[.aiModels]?.first { $0.name == "Ollama models" }?.detail.contains("llama3:latest") == true,
           "Ollama model names read from manifests")
     check(names(.developer).contains("pip") && !names(.developer).contains("huggingface"),
@@ -204,8 +212,10 @@ section("App caches") {
         AppFile(path: container, size: 60_000, kind: "Container"),
     ]
     let caches = Set(AppInventory.cacheFiles(from: data).map { PathFormat.abbreviated($0.path, home: home) })
-    check(caches == ["~/Library/Caches/com.example.browser", "~/Library/HTTPStorages/com.gone.app",
-                     "~/Library/Containers/com.gone.app/Data/Library/Caches"], "cache paths: \(caches)")
+    check(caches == ["~/Library/Caches/com.example.browser", "~/Library/Containers/com.gone.app/Data/Library/Caches/x"],
+          "Clear Cache: caches and the contents of container caches only: \(caches)")
+    let web = Set(AppInventory.webDataFiles(from: data).map { PathFormat.abbreviated($0.path, home: home) })
+    check(web == ["~/Library/HTTPStorages/com.gone.app"], "Reset Web Data: cookies and website storage: \(web)")
 }
 
 section("SafetyGuard") {
@@ -335,6 +345,41 @@ section("Saved search index") {
         check(!a.isEmpty && a == b, "search results match")
     }
     check(ScanIndex.load(root: home + "/Documents", in: dir) == nil, "no index for another root")
+
+    // A well-formed file whose sizes would overflow when added up must load as nil, not crash.
+    func writeIndex(_ build: (inout ScanIndex.Writer) -> Void, root: String) throws {
+        var w = ScanIndex.Writer()
+        build(&w)
+        w.bytes(Array(SHA256.hash(data: w.buffer)))
+        let data = try (Data(w.buffer) as NSData).compressed(using: .lz4) as Data
+        try data.write(to: ScanIndex.url(forRoot: root, in: dir))
+    }
+    let odd = home + "/Projects"
+    try writeIndex({ w in
+        w.bytes(ScanIndex.magic); w.u8(ScanIndex.version); w.string(odd); w.double(0)
+        w.u32(1); w.i32(-1); w.string(""); w.u8(0); w.double(0); w.u32(2)
+        for name in ["a", "b"] { w.string(name); w.i64(Int64.max / 2 + 1); w.double(0); w.u8(0) }
+    }, root: odd)
+    check(ScanIndex.load(root: odd, in: dir) == nil, "sizes that overflow are rejected")
+    try writeIndex({ w in
+        w.bytes(ScanIndex.magic); w.u8(ScanIndex.version); w.string(odd); w.double(0)
+        w.u32(1); w.i32(-1); w.string(""); w.u8(0); w.double(0); w.u32(1)
+        w.string("neg"); w.i64(-5); w.double(0); w.u8(0)
+    }, root: odd)
+    check(ScanIndex.load(root: odd, in: dir) == nil, "negative sizes are rejected")
+    try writeIndex({ w in
+        w.bytes(ScanIndex.magic); w.u8(ScanIndex.version); w.string(odd); w.double(0)
+        w.u32(2); w.i32(-1); w.string(""); w.u8(0); w.double(0); w.u32(0)
+        w.i32(-1); w.string("second-root"); w.u8(0); w.double(0); w.u32(0)
+    }, root: odd)
+    check(ScanIndex.load(root: odd, in: dir) == nil, "only the first folder can be the root")
+
+    // A flipped byte fails the checksum.
+    let good = ScanIndex.url(forRoot: home, in: dir)
+    var raw = [UInt8]((try (Data(contentsOf: good) as NSData).decompressed(using: .lz4)) as Data)
+    raw[raw.count / 2] ^= 0x40
+    try ((Data(raw) as NSData).compressed(using: .lz4) as Data).write(to: good)
+    check(ScanIndex.load(root: home, in: dir) == nil, "checksum catches a changed byte")
     try Data("garbage".utf8).write(to: ScanIndex.url(forRoot: home + "/Pictures", in: dir))
     check(ScanIndex.load(root: home + "/Pictures", in: dir) == nil, "corrupt index is ignored")
 }
@@ -361,6 +406,36 @@ section("Treemap layout") {
     let worst = rects.prefix(5).map { max($0.width / $0.height, $0.height / $0.width) }.max() ?? 0
     check(worst < 4, "large rects stay close to square (worst \(worst))")
     check(Treemap.squarify([], in: bounds).isEmpty && Treemap.squarify([5], in: .zero) == [.zero], "empty inputs")
+}
+
+section("Deep folders and big folders") {
+    // A folder chain far deeper than any real disk must not overflow the stack when its path is built.
+    var node = DirNode(name: "/deep", parent: nil)
+    let top = node
+    for i in 0..<100_000 {
+        let child = DirNode(name: "d\(i % 10)", parent: node)
+        node.subdirs.append(child)
+        node = child
+    }
+    check(node.path.hasPrefix("/deep/d0/d1") && node.path.count > 300_000, "path of a 100,000-level chain")
+    // Released on a background thread (small stack), as the app does with old trees.
+    let released = DispatchSemaphore(value: 0)
+    var holder: DirNode? = top
+    node = DirNode(name: "/other", parent: nil)
+    DispatchQueue.global().async {
+        holder = nil
+        released.signal()
+    }
+    released.wait()
+    check(holder == nil, "a 100,000-level tree is released without overflowing the stack")
+
+    // Sorting a folder's children reads each size once.
+    let big = DirNode(name: "/big", parent: nil)
+    big.files = (0..<20_000).map { FileEntry(name: "f\($0)", size: Int64(($0 * 7919) % 20_000), modified: 0, fileID: 0, flags: 0) }
+    let start = Date()
+    let sorted = big.sortedChildren
+    let seconds = Date().timeIntervalSince(start)
+    check(sorted.count == 20_000 && sorted.first?.size == 19_999 && seconds < 1, "20,000 children sorted in \(String(format: "%.2f", seconds)) s")
 }
 
 section("References outliving their tree") {

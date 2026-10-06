@@ -51,6 +51,9 @@ struct TreemapView: View {
                         .allowsHitTesting(false)
                     }
                     .task(id: layoutKey(geo.size)) {
+                        // Wait for a resize to settle; each new size cancels this task.
+                        if !cells.isEmpty { try? await Task.sleep(nanoseconds: 80_000_000) }
+                        if Task.isCancelled { return }
                         cells = layout(in: CGRect(origin: .zero, size: geo.size))
                         layoutVersion += 1
                         hovered = nil

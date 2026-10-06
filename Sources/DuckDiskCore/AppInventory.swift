@@ -30,8 +30,10 @@ public struct AppInfo: Identifiable, Sendable {
     public let bundleSize: Int64
     public let lastUsed: Date?
     public let leftovers: [AppFile]
-    /// The part of the app's data that is safe to clear: caches and web storage, never settings or documents.
+    /// Caches the app rebuilds by itself; clearing them keeps settings, documents and sign-ins.
     public let caches: [AppFile]
+    /// Cookies and website storage (HTTPStorages, WebKit). Clearing them usually signs the user out.
+    public let webData: [AppFile]
     public let background: [BackgroundItem]
     public let isApple: Bool
 
@@ -39,6 +41,7 @@ public struct AppInfo: Identifiable, Sendable {
     public var footprint: Int64 { bundleSize + leftoverSize }
     public var isRunning: Bool { background.contains { $0.kind == .process } }
     public var cacheSize: Int64 { caches.reduce(0) { $0 + $1.size } }
+    public var webDataSize: Int64 { webData.reduce(0) { $0 + $1.size } }
 }
 
 /// Builds the Applications room: every app, its data across ~/Library, and what runs in the background.
@@ -155,22 +158,29 @@ public enum AppInventory {
         return AppInfo(path: appPath, name: app.name, bundleID: app.bundleID, version: app.version,
                        bundleSize: DirectorySize.of(appPath), lastUsed: lastUsedDate(appPath),
                        leftovers: leftovers.sorted { $0.size > $1.size }, caches: cacheFiles(from: leftovers),
+                       webData: webDataFiles(from: leftovers),
                        background: background, isApple: isApple)
     }
 
-    static let cacheKinds: Set<String> = ["Caches", "Web storage", "Web data"]
+    static let webDataKinds: Set<String> = ["Web storage", "Web data"]
 
-    /// Cache folders among an app's data, plus the Caches folder inside each of its sandbox containers.
+    /// The app's Caches folders, plus what is inside the Caches folder of each of its sandbox containers
+    /// (the container folder itself belongs to macOS and stays).
     static func cacheFiles(from data: [AppFile]) -> [AppFile] {
-        var out = data.filter { cacheKinds.contains($0.kind) }
+        var out = data.filter { $0.kind == "Caches" }
         for container in data where container.kind == "Container" {
             let caches = container.path + "/Data/Library/Caches"
-            var isDir: ObjCBool = false
-            if FileManager.default.fileExists(atPath: caches, isDirectory: &isDir), isDir.boolValue {
-                out.append(AppFile(path: caches, size: DirectorySize.of(caches), kind: "Container cache"))
+            for name in (try? FileManager.default.contentsOfDirectory(atPath: caches)) ?? [] where name != ".DS_Store" {
+                let path = caches + "/" + name
+                out.append(AppFile(path: path, size: DirectorySize.of(path), kind: "Container cache"))
             }
         }
         return out.filter { $0.size > 0 }.sorted { $0.size > $1.size }
+    }
+
+    /// Cookies and website data stored for the app.
+    static func webDataFiles(from data: [AppFile]) -> [AppFile] {
+        data.filter { webDataKinds.contains($0.kind) && $0.size > 0 }.sorted { $0.size > $1.size }
     }
 
     static func lastUsedDate(_ path: String) -> Date? {

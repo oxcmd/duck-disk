@@ -127,12 +127,15 @@ final class AppModel {
     var appsProgress = (done: 0, total: 0)
 
     @ObservationIgnored private var scanner: DiskScanner?
+    /// Serial queue for saving, loading and deleting the Find index, so the three never overlap.
+    @ObservationIgnored private let indexQueue = DispatchQueue(label: "app.duckdisk.index", qos: .utility)
     @ObservationIgnored private var duplicateFinder: DuplicateFinder?
     @ObservationIgnored private var context: ClassifierContext?
     /// path → category, for colouring rows and the inspector.
     @ObservationIgnored private(set) var categoryByPath: [String: CleanupCategory] = [:]
-    /// For every folder that contains cleanup items: clearable bytes inside it per category.
-    @ObservationIgnored private var clearableInside: [String: [CleanupCategory: Int64]] = [:]
+    /// For every folder that contains cleanup items: clearable bytes inside it per category. Built only when the
+    /// treemap asks, and kept until the classification changes.
+    @ObservationIgnored private var clearableInside: (version: Int, map: [String: [CleanupCategory: Int64]])?
     /// Bumped whenever the category index changes, so views that colour by category redraw.
     private(set) var classificationVersion = 0
 
@@ -162,21 +165,40 @@ final class AppModel {
 
     /// Loads the saved index for the current target in the background.
     func loadIndex() {
-        indexTree = nil
+        dropIndexTree()
         guard UserDefaults.standard.bool(forKey: Prefs.keepIndex) else { return }
         let path = target.path
         let generation = scanGeneration
         Task {
-            let loaded = await Task.detached(priority: .utility) { ScanIndex.load(root: path) }.value
-            guard generation == scanGeneration, tree == nil, target.path == path else { return }
+            let loaded: ScanTree? = await withCheckedContinuation { cont in
+                indexQueue.async { cont.resume(returning: ScanIndex.load(root: path)) }
+            }
+            guard generation == scanGeneration, tree == nil, target.path == path,
+                  UserDefaults.standard.bool(forKey: Prefs.keepIndex) else { return }
             indexTree = loaded
         }
     }
 
-    /// Turns the saved index off: drops the loaded one and deletes Duck Disk's index files.
+    /// Writes the index after a scan, unless the setting was turned off by the time the queue gets to it.
+    private func saveIndex(_ tree: ScanTree) {
+        indexQueue.async {
+            guard UserDefaults.standard.bool(forKey: Prefs.keepIndex) else { return }
+            try? ScanIndex.save(tree)
+        }
+    }
+
+    /// Turns the saved index off: drops the loaded one and deletes Duck Disk's index files. The serial queue
+    /// runs the deletion after any save that was already queued.
     func forgetIndexes() {
+        dropIndexTree()
+        indexQueue.async { ScanIndex.removeAll() }
+    }
+
+    /// Releases the loaded index off the main thread; freeing millions of nodes takes a moment.
+    private func dropIndexTree() {
+        guard let old = indexTree else { return }
         indexTree = nil
-        Task.detached(priority: .utility) { ScanIndex.removeAll() }
+        DispatchQueue.global(qos: .utility).async { withExtendedLifetime(old) {} }
     }
 
     // MARK: - Targets
@@ -224,7 +246,7 @@ final class AppModel {
         classification = Classification()
         selection = []
         categoryByPath = [:]
-        clearableInside = [:]
+        clearableInside = nil
         duplicateGroups = []
         duplicateKeep = [:]
         duplicatePhase = .idle
@@ -311,10 +333,8 @@ final class AppModel {
             snapshots.save(Snapshot.make(tree: tree, classification: classification))
             activityRevision += 1
         }
-        indexTree = nil
-        if defaults.bool(forKey: Prefs.keepIndex) {
-            Task.detached(priority: .utility) { try? ScanIndex.save(tree) }
-        }
+        dropIndexTree()
+        saveIndex(tree)
         findDuplicates(finder)
     }
 
@@ -372,23 +392,29 @@ final class AppModel {
 
     private func rebuildCategoryIndex() {
         var map: [String: CleanupCategory] = [:]
+        for i in classification.allItems { map[i.path] = i.category }
+        categoryByPath = map
+        clearableInside = nil
+        classificationVersion += 1
+    }
+
+    private func clearableInsideMap() -> [String: [CleanupCategory: Int64]] {
+        if let cached = clearableInside, cached.version == classificationVersion { return cached.map }
         var inside: [String: [CleanupCategory: Int64]] = [:]
         for i in classification.allItems {
-            map[i.path] = i.category
             var p = PathFormat.parent(of: i.path)
             while p.count > 1 {
                 inside[p, default: [:]][i.category, default: 0] += i.size
                 p = PathFormat.parent(of: p)
             }
         }
-        categoryByPath = map
-        clearableInside = inside
-        classificationVersion += 1
+        clearableInside = (classificationVersion, inside)
+        return inside
     }
 
     /// The cleanup category that makes up at least half of a folder's bytes, if any.
     func dominantCategory(inside path: String, size: Int64) -> CleanupCategory? {
-        guard size > 0, let byCategory = clearableInside[path],
+        guard size > 0, let byCategory = clearableInsideMap()[path],
               let top = byCategory.max(by: { $0.value < $1.value }), top.value * 2 >= size else { return nil }
         return top.key
     }

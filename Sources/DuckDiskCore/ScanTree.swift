@@ -57,13 +57,35 @@ public final class DirNode: @unchecked Sendable {
         self.parent = parent
     }
 
+    /// Tears the subtree down with a loop: releasing nested folders one inside another would recurse once per
+    /// level and could overflow the stack on a very deep tree.
+    deinit {
+        guard !subdirs.isEmpty else { return }
+        var pending = subdirs
+        subdirs = []
+        while var node = pending.popLast() {
+            if isKnownUniquelyReferenced(&node) {
+                pending.append(contentsOf: node.subdirs)
+                node.subdirs = []
+            }
+        }
+    }
+
     public var isRoot: Bool { parent == nil }
 
     /// Absolute path, rebuilt by walking up to the root.
     public var path: String {
-        guard let parent else { return name }
-        let base = parent.path
-        return base == "/" ? "/" + name : base + "/" + name
+        // Iterative so very deep folder chains cannot overflow the stack.
+        var names: [String] = []
+        var node: DirNode? = self
+        while let n = node, let p = n.parent {
+            names.append(n.name)
+            node = p
+        }
+        let base = node?.name ?? name
+        if names.isEmpty { return base }
+        let tail = names.reversed().joined(separator: "/")
+        return base == "/" ? "/" + tail : base + "/" + tail
     }
 
     /// Depth below the scan root (root = 0).
@@ -84,11 +106,12 @@ public final class DirNode: @unchecked Sendable {
 
     /// Live (not removed) children, largest first.
     public var sortedChildren: [ItemRef] {
-        var refs: [ItemRef] = []
-        refs.reserveCapacity(subdirs.count + files.count)
-        for d in subdirs where !d.isRemoved { refs.append(ItemRef(dir: d)) }
-        for f in files where !f.removed { refs.append(ItemRef(dir: self, fileName: f.name)) }
-        return refs.sorted { $0.size > $1.size }
+        // Sizes are read once here; looking them up through ItemRef inside the sort is quadratic.
+        var pairs: [(ref: ItemRef, size: Int64)] = []
+        pairs.reserveCapacity(subdirs.count + files.count)
+        for d in subdirs where !d.isRemoved { pairs.append((ItemRef(dir: d), d.size)) }
+        for f in files where !f.removed { pairs.append((ItemRef(dir: self, fileName: f.name), f.size)) }
+        return pairs.sorted { $0.size > $1.size }.map(\.ref)
     }
 
 }

@@ -41,23 +41,32 @@ public enum Classifier {
                                   ".android/cache", ".expo"]
     /// Folders under ~/.cache that hold AI models; they are listed under AI models, not Developer files.
     static let aiCacheFolders: Set<String> = ["huggingface", "lm-studio", "whisper", "torch"]
-    /// Model folders: home-relative path, depth of the items below it, and the app that owns them.
-    static let aiModelFolders: [(path: String, depth: Int, app: String)] = [
-        (".lmstudio/models", 2, "LM Studio"), (".cache/lm-studio/models", 2, "LM Studio"),
-        ("Library/Application Support/nomic.ai/GPT4All", 1, "GPT4All"),
-        ("jan/models", 1, "Jan"), ("Library/Application Support/Jan/data/models", 2, "Jan"),
-        ("Library/Containers/com.liuliu.draw-things/Data/Documents/Models", 1, "Draw Things"),
-        (".diffusionbee/downloads", 1, "DiffusionBee"),
-        ("Library/Application Support/MacWhisper/models", 1, "MacWhisper"),
-        (".cache/whisper", 1, "Whisper"), (".cache/torch/hub/checkpoints", 1, "PyTorch"),
+    /// What counts as one model inside a model folder.
+    enum AIItems {
+        /// Each folder at the given depth is one model (LM Studio, Jan).
+        case folders
+        /// Only files with a model extension, or Core ML model packages, count; settings and databases stay.
+        case modelFiles
+    }
+    /// Model folders: home-relative path, depth of the items below it, owning app, and what counts as a model.
+    static let aiModelFolders: [(path: String, depth: Int, app: String, items: AIItems)] = [
+        (".lmstudio/models", 2, "LM Studio", .folders), (".cache/lm-studio/models", 2, "LM Studio", .folders),
+        ("jan/models", 1, "Jan", .folders), ("Library/Application Support/Jan/data/models", 2, "Jan", .folders),
+        ("Library/Application Support/nomic.ai/GPT4All", 1, "GPT4All", .modelFiles),
+        ("Library/Containers/com.liuliu.draw-things/Data/Documents/Models", 1, "Draw Things", .modelFiles),
+        (".diffusionbee/downloads", 1, "DiffusionBee", .modelFiles),
+        ("Library/Application Support/MacWhisper/models", 1, "MacWhisper", .modelFiles),
+        (".cache/whisper", 1, "Whisper", .modelFiles), (".cache/torch/hub/checkpoints", 1, "PyTorch", .modelFiles),
     ]
+    static let modelFileExtensions: Set<String> = ["gguf", "ggml", "bin", "safetensors", "ckpt", "pt", "pth",
+                                                   "onnx", "mlmodel", "tflite"]
+    static let modelPackageExtensions: Set<String> = ["mlmodelc", "mlpackage"]
     /// Model stores whose files are shared between models, so the whole folder is one item.
     static let aiModelStores: [(path: String, app: String)] = [
         (".ollama/models", "Ollama"), ("Library/Application Support/Msty/models", "Msty"),
     ]
+    /// Extensions that identify a loose model file anywhere in the home folder.
     static let aiModelExtensions: Set<String> = ["gguf", "ggml", "safetensors", "ckpt"]
-    /// GPT4All keeps databases next to its models; only these count there.
-    static let gpt4allModelExtensions: Set<String> = ["gguf", "bin"]
 
     /// Build-output folders and the project file that must sit next to them.
     static let projectBuildFolders: [String: String] = ["node_modules": "package.json", ".build": "Package.swift",
@@ -226,8 +235,14 @@ public enum Classifier {
                 level = level.filter(\.isDirectory).flatMap { children(tree, $0.path) }
             }
             for ref in level {
-                if folder.app == "GPT4All" && !ref.isDirectory
-                    && !gpt4allModelExtensions.contains(FileKinds.lowercasedExtension(ref.name)) { continue }
+                let ext = FileKinds.lowercasedExtension(ref.name)
+                switch folder.items {
+                case .folders:
+                    guard ref.isDirectory else { continue }
+                case .modelFiles:
+                    guard ref.isDirectory ? modelPackageExtensions.contains(ext) : modelFileExtensions.contains(ext)
+                    else { continue }
+                }
                 out.append(item(ref, .aiModels, detail: folder.app))
             }
         }
@@ -238,19 +253,20 @@ public enum Classifier {
             out.append(CleanupItem(path: ref.path, ref: ref, category: .aiModels, size: ref.size,
                                    name: parts.joined(separator: "/"), detail: kind, modified: ref.modified))
         }
-        // Loose model files anywhere in the home folder.
+        // Loose model files in the home folder, outside ~/Library (app data, iCloud and cloud storage live there).
+        // They may be the user's own work, so the detail says to check before removing.
         if let home = tree.node(atPath: ctx.home) ?? (PathFormat.isInside(tree.rootPath, ctx.home) ? tree.root : nil) {
             var stack = [home]
             while let dir = stack.popLast() {
                 for f in tree.files(of: dir) where !f.removed && f.size >= ctx.aiStrayMinSize
                     && aiModelExtensions.contains(FileKinds.lowercasedExtension(f.name)) {
                     let ref = ItemRef(dir: dir, fileName: f.name)
-                    out.append(item(ref, .aiModels, detail: "Model file"))
+                    out.append(item(ref, .aiModels, detail: "Loose model file · check it is not your own"))
                 }
                 // Never inside app bundles or other packages (removing a file there breaks the app),
                 // nor in the Trash.
                 stack.append(contentsOf: dir.subdirs.filter {
-                    !$0.isRemoved && !$0.isPackage && !(dir === home && $0.name == ".Trash")
+                    !$0.isRemoved && !$0.isPackage && !(dir === home && ($0.name == ".Trash" || $0.name == "Library"))
                 })
             }
         }

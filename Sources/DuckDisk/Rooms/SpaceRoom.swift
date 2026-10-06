@@ -87,7 +87,8 @@ struct SpaceRoom: View {
         .onChange(of: selected) { _, ref in
             if let ref { model.inspected = InspectedItem(path: ref.path, ref: ref) }
         }
-        .task(id: "\(ObjectIdentifier(dir).hashValue)|\(model.revision)") {
+        .task(id: "\(ObjectIdentifier(dir).hashValue)|\(model.revision)|\(mode)") {
+            guard mode == .folders else { return }
             rows = dir.sortedChildren
         }
         .task(id: "\(mode)|\(model.revision)") {

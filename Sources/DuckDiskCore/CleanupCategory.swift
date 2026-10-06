@@ -39,7 +39,7 @@ public enum CleanupCategory: String, CaseIterable, Codable, Sendable, Identifiab
         case .developer:
             return "Build products, simulator caches and package caches. Tools re-create them, but rebuilding takes time."
         case .aiModels:
-            return "Model files downloaded by apps like Ollama, LM Studio and Hugging Face. They can be downloaded again, but they are big."
+            return "Models downloaded by apps like Ollama, LM Studio and Hugging Face can be downloaded again, but they are big. Loose model files may be your own work, so check them first."
         case .downloads:
             return "Installers and files in Downloads you have not touched for a long time."
         case .duplicates:

@@ -130,11 +130,16 @@ struct FindRoom: View {
         let cancelled = CancelFlag()
         let started = Date()
         let fromIndex = model.tree == nil
+        let excluded = Prefs.excluded
         let result = await withTaskCancellationHandler {
             await Task.detached(priority: .userInitiated) {
                 let hits = TreeSearch.run(tree, query) { cancelled.isSet }
-                // A saved index can list files that have gone since; show only what still exists.
-                return fromIndex ? hits.filter { access($0.ref.path, F_OK) == 0 } : hits
+                // A saved index can list files that have gone since, or folders excluded after it was made.
+                guard fromIndex else { return hits }
+                return hits.filter { hit in
+                    let path = hit.ref.path
+                    return access(path, F_OK) == 0 && !excluded.contains { PathFormat.isInside(path, $0) }
+                }
             }.value
         } onCancel: {
             cancelled.set()
